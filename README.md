@@ -129,3 +129,16 @@ Para instalar en otro equipo, creá un entorno virtual con Python 3.12, instalá
 requirements.txt y ejecutá python -m playwright install chromium. Copiá .env.example
 a .env y completá los IDs y la ruta de las credenciales de Google. El CV maestro
 y las credenciales se configuran localmente.
+
+## Interfaz web local
+
+Iniciá la interfaz desde la carpeta del proyecto. Usa la configuración local de Google Sheets; la búsqueda interactiva en LinkedIn y la autorización de Gmail siguen ejecutándose desde Terminal.
+
+```sh
+set -a
+source ./.env
+set +a
+.venv/bin/python main.py --web
+```
+
+Abrí <http://127.0.0.1:8765>. La interfaz permite registrar oportunidades, consultar el registro y generar borradores de CV y carta. El servidor escucha únicamente en tu computadora. Para generar documentos necesitás el CV maestro privado en `datos/cv_maestro.yaml`.
