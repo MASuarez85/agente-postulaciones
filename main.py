@@ -17,6 +17,7 @@ def main():
     parser.add_argument("--generar", nargs=3, metavar=("EMPRESA", "PUESTO", "AVISO_TXT"))
     registro.add_argument("--preparar", nargs=4, metavar=("EMPRESA", "PUESTO", "URL", "AVISO_TXT"))
     parser.add_argument("--salida", type=Path)
+    parser.add_argument("--web", action="store_true", help="Abre la interfaz web local")
     registro.add_argument("--autorizar-gmail", action="store_true")
     registro.add_argument("--importar-alertas", type=int, metavar="DIAS")
     parser.add_argument("--simular", action="store_true")
@@ -27,6 +28,11 @@ def main():
     registro.add_argument("--configurar-linkedin", action="store_true")
     args = parser.parse_args()
     raiz = Path(__file__).resolve().parent
+    if args.web:
+        from agente.web import servir
+
+        servir(raiz)
+        return
     if args.configurar_linkedin:
         from agente.credenciales import configurar
         from keyring.errors import KeyringError
