@@ -129,3 +129,26 @@ Para instalar en otro equipo, creá un entorno virtual con Python 3.12, instalá
 requirements.txt y ejecutá python -m playwright install chromium. Copiá .env.example
 a .env y completá los IDs y la ruta de las credenciales de Google. El CV maestro
 y las credenciales se configuran localmente.
+
+## Interfaz web local
+
+También podés usar el agente desde una página web local. La interfaz se limita a tu computadora y utiliza las mismas variables de entorno y conexiones de Google Sheets que los comandos existentes.
+
+1. Activá el entorno virtual e instalá las dependencias:
+
+```sh
+python -m pip install -r requirements.txt
+```
+
+2. Cargá las variables definidas en `.env` y abrí la interfaz:
+
+```sh
+set -a
+source ./.env
+set +a
+python main.py --web
+```
+
+3. Abrí <http://127.0.0.1:8765> en el navegador. Para cerrar el servidor, presioná `Ctrl+C` en la terminal.
+
+La página permite revisar y registrar avisos en la planilla operativa, consultar las oportunidades recientes y generar borradores de CV y carta en PDF. La instalación de `gspread` habilita Google Sheets y `reportlab` habilita la generación de documentos. Para generar documentos, también necesitás el archivo privado `datos/cv_maestro.yaml`. No ingreses credenciales en la página: se leen desde el archivo `.env` y la clave de cuenta de servicio configurados localmente.

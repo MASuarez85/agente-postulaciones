@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f8fb">
+  <title>Agente de postulaciones</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Agente de postulaciones, inicio">
+      <span class="brand-mark" aria-hidden="true">AP</span>
+      <span>Agente de postulaciones</span>
+    </a>
+    <div class="connection" id="connection" aria-live="polite"><span class="pulse"></span><span>Revisando configuración</span></div>
+  </header>
+
+  <main>
+    <section class="welcome">
+      <div>
+        <p class="eyebrow">TU BÚSQUEDA, EN ORDEN</p>
+        <h1>Un lugar para cada oportunidad.</h1>
+        <p class="intro">Registrá avisos, evitá duplicados y prepará tus documentos desde un solo lugar.</p>
+      </div>
+      <div class="welcome-icon" aria-hidden="true"><span>✳</span><i></i><b></b></div>
+    </section>
+
+    <section class="setup-note" id="setup-note" hidden>
+      <div class="note-icon">i</div>
+      <div><strong>Conectá el agente para habilitar todas las funciones</strong><p>La web corre en tu computadora. Configurá las variables de Google Sheets en la terminal antes de iniciarla.</p></div>
+      <a href="/guia" target="_blank" rel="noreferrer">Ver guía de configuración</a>
+    </section>
+
+    <section class="workspace">
+      <div class="main-column">
+        <section class="card form-card" aria-labelledby="register-title">
+          <div class="card-heading">
+            <div class="step">01</div>
+            <div><h2 id="register-title">Registrar una oportunidad</h2><p>El agente revisa si ya existe en tu historial.</p></div>
+          </div>
+          <form id="register-form">
+            <div class="fields two-col">
+              <label>Empresa<input name="empresa" placeholder="Ej. Nubank" maxlength="160" required></label>
+              <label>Puesto<input name="rol" placeholder="Ej. Engineering Manager" maxlength="200" required></label>
+            </div>
+            <label>Enlace del aviso<input name="url" type="url" placeholder="https://www.linkedin.com/jobs/view/..." maxlength="1000" required></label>
+            <div class="form-footer"><span class="hint">Los avisos nuevos quedan pendientes de revisión.</span><button class="button primary" type="submit">Revisar y registrar</button></div>
+          </form>
+          <div class="feedback" id="register-feedback" role="status" hidden></div>
+        </section>
+
+        <section class="card form-card" aria-labelledby="docs-title">
+          <div class="card-heading">
+            <div class="step">02</div>
+            <div><h2 id="docs-title">Preparar CV y carta</h2><p>Generá borradores basados en tu CV maestro y el aviso.</p></div>
+          </div>
+          <form id="docs-form">
+            <div class="fields two-col">
+              <label>Empresa<input name="empresa" placeholder="Nombre de la empresa" maxlength="160" required></label>
+              <label>Puesto<input name="rol" placeholder="Nombre del puesto" maxlength="200" required></label>
+            </div>
+            <label>Descripción del aviso<textarea name="aviso" rows="5" maxlength="50000" placeholder="Pegá acá la descripción del puesto…" required></textarea></label>
+            <div class="form-footer"><span class="hint">Se guardan en la carpeta <code>salida</code>.</span><button class="button primary" type="submit">Generar documentos</button></div>
+          </form>
+          <div class="feedback" id="docs-feedback" role="status" hidden></div>
+        </section>
+      </div>
+
+      <aside class="side-column">
+        <section class="card status-card">
+          <div class="side-title"><h2>Estado del agente</h2><button class="icon-button" id="refresh" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div>
+          <p class="side-intro">Servicios disponibles en esta computadora.</p>
+          <ul class="checks" id="checks">
+            <li><span class="check-dot"></span><span>Google Sheets</span><span class="check-state">Comprobando</span></li>
+          </ul>
+          <p class="privacy"><span aria-hidden="true">⌂</span> Tus datos y documentos permanecen en tu computadora.</p>
+        </section>
+
+        <section class="card list-card">
+          <div class="side-title"><div><h2>Oportunidades recientes</h2><p class="side-intro">Últimos avisos del registro</p></div><button class="icon-button" id="reload-list" title="Actualizar oportunidades" aria-label="Actualizar oportunidades">↻</button></div>
+          <div class="opportunities" id="opportunities"><div class="loading"><span class="spinner"></span> Cargando registro…</div></div>
+          <a class="text-link" href="#register-title">Registrar otro aviso <span aria-hidden="true">＋</span></a>
+        </section>
+      </aside>
+    </section>
+    <footer>Agente de postulaciones <span>·</span> Interfaz local v1</footer>
+  </main>
+</body>
+</html>
