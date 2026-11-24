@@ -1,12 +1,18 @@
 # Agente de postulaciones
 
-Primer avance del RFC v1.1. El filtro local consulta un historial en memoria y decide si omitir, revisar o continuar con un aviso. La similitud de roles usa un umbral provisional de 0,8 y solo deriva a revisión. La demo usa datos ficticios y no necesita credenciales ni paquetes externos.
+## Documentación del producto
+
+- [PRD](docs/PRD.md): objetivos, alcance y requisitos del agente.
+- [RFC](docs/RFC.md): arquitectura propuesta y reglas de operación.
+- [Changelog](docs/CHANGELOG.md): cambios relevantes del producto y su diseño.
+
+El PRD y el RFC describen el producto objetivo y su arquitectura; no implican que esas capacidades ya estén implementadas. El prototipo actual ofrece flujos locales para consultar y registrar avisos, importar alertas de Gmail, buscar en LinkedIn y generar borradores de documentos. La búsqueda diaria en varios portales, la evaluación integral por usuario y el envío automático siguen siendo parte del diseño objetivo. La demo usa datos ficticios y no necesita credenciales ni paquetes externos.
 
 ```sh
 python3 main.py --demo
 ```
 
-El RFC propone Python 3.12 para el proyecto. La demo también funciona con Python 3.9.
+El proyecto apunta a Python 3.12. La demo también funciona con Python 3.9.
 
 Para completar la fase de registro queda conectar Google Sheets, configurar la planilla del agente e identificar la pestaña y las columnas de empresa, rol y enlace del historial. El módulo de historial solo recibe filas para consulta. El acceso real a la planilla histórica deberá configurarse en modo lectura.
 
