@@ -11,7 +11,7 @@ Cada usuario puede habilitar que el agente se postule en su nombre. Cuando lo ha
 
 ## 2. Problema
 
-La búsqueda diaria, la revisión de avisos, la adaptación de documentos y la carga de resultados son tareas repetitivas. Hoy el proyecto ofrece flujos locales para buscar en LinkedIn, importar alertas de Gmail, registrar avisos, detectar algunos duplicados y generar borradores. Todavía no realiza una búsqueda diaria en varios portales ni completa y envía postulaciones automáticamente; esos pasos dependen de intervención manual.
+La búsqueda diaria, la revisión de avisos, la adaptación de documentos y la carga de resultados son tareas repetitivas. Hoy el proyecto permite configurar palabras clave y contexto para buscar en LinkedIn, evaluar avisos nuevos con Claude, consultar duplicados y registrar los resultados para revisión. Todavía no ejecuta búsquedas diarias programadas ni cubre varios portales; tampoco completa y envía postulaciones automáticamente.
 
 ## 3. Usuarios y objetivo
 

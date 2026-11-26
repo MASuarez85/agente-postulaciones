@@ -6,6 +6,23 @@ from agente.filtro import filtrar
 from agente.historico import Historico, Postulacion
 
 
+def buscar_y_evaluar(raiz, palabras, ubicacion, limite, simular, perfil, contexto):
+    from agente.linkedin import buscar
+    from agente.registro import importar_alertas
+
+    def importar(enlaces, lector=None):
+        return importar_evaluando(enlaces, lector, perfil, f"{contexto}\nConsulta usada: {palabras}".strip(), f"Búsqueda LinkedIn ({palabras})")
+
+    return buscar(raiz / "credenciales/linkedin-perfil", palabras,
+                  ubicacion, limite, simular, importar)
+
+
+def importar_evaluando(enlaces, lector, perfil, contexto, origen="Búsqueda LinkedIn"):
+    from agente.registro import importar_alertas
+
+    return importar_alertas(enlaces, lector=lector, evaluar=True, perfil=perfil, contexto=contexto, origen=origen)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Agente local de postulaciones")
     parser.add_argument("--demo", action="store_true", help="Ejecuta el filtro con datos ficticios")
@@ -22,7 +39,13 @@ def main():
     registro.add_argument("--importar-alertas", type=int, metavar="DIAS")
     parser.add_argument("--simular", action="store_true")
     registro.add_argument("--leer-aviso", metavar="URL")
+    registro.add_argument("--evaluar-aviso", metavar="AVISO_TXT", help="Evalúa compatibilidad con Claude usando evidencia del CV")
     registro.add_argument("--buscar-linkedin", metavar="PALABRAS")
+    registro.add_argument("--buscar-config", type=Path, metavar="BUSQUEDA_JSON", help="Busca con las palabras clave y el contexto configurados por usuario")
+    registro.add_argument("--reintentar-incompletos", action="store_true", help="Relee avisos guardados sin empresa o puesto")
+    parser.add_argument("--perfil", type=Path, help="Ruta al perfil profesional JSON; por defecto datos/cv_maestro.yaml")
+    parser.add_argument("--contexto-archivo", type=Path, help="Archivo de texto con el contexto de búsqueda del usuario")
+    parser.add_argument("--publicado-en", help="Fecha publicada verificada, en formato AAAA-MM-DD")
     parser.add_argument("--ubicacion", default="Argentina")
     parser.add_argument("--limite", type=int, default=10)
     registro.add_argument("--configurar-linkedin", action="store_true")
@@ -42,10 +65,8 @@ def main():
         except (ValueError, RuntimeError, KeyringError, EOFError):
             parser.exit(1, "No se guardaron las credenciales. Revisá el acceso al Llavero y volvé a intentarlo desde Terminal.\n")
         return
-    if args.buscar_linkedin:
+    if args.buscar_linkedin or args.buscar_config or args.reintentar_incompletos:
         from keyring.errors import KeyringError
-        from agente.linkedin import buscar
-        from agente.registro import importar_alertas
         from playwright.sync_api import Error as BrowserError
         from requests.exceptions import RequestException
         from gspread.exceptions import GSpreadException
@@ -54,12 +75,53 @@ def main():
         if not 1 <= args.limite <= 25:
             parser.error("--limite debe estar entre 1 y 25.")
         try:
-            cantidad = buscar(raiz / "credenciales/linkedin-perfil", args.buscar_linkedin,
-                              args.ubicacion, args.limite, args.simular, importar_alertas)
-            print(f"Avisos {'detectados' if args.simular else 'cargados'}: {cantidad}")
+            perfil = args.perfil or raiz / "datos/cv_maestro.yaml"
+            if args.reintentar_incompletos:
+                from agente.linkedin import reintentar_lecturas
+                from agente.registro import enlaces_incompletos
+
+                enlaces = enlaces_incompletos()
+                if not enlaces:
+                    print("No hay avisos incompletos para releer.")
+                else:
+                    contexto = args.contexto_archivo.read_text(encoding="utf-8") if args.contexto_archivo else ""
+                    cantidad = reintentar_lecturas(
+                        raiz / "credenciales/linkedin-perfil",
+                        enlaces,
+                        lambda urls, lector=None: importar_evaluando(urls, lector, perfil, contexto, "Reintento LinkedIn"),
+                    )
+                    print(f"Avisos incompletos recuperados: {cantidad}")
+            elif args.buscar_config:
+                import json
+
+                configuracion = json.loads(args.buscar_config.read_text(encoding="utf-8"))
+                if not isinstance(configuracion, dict):
+                    parser.error("BUSQUEDA_JSON debe contener un objeto JSON.")
+                palabras = configuracion.get("palabras_clave")
+                contexto = configuracion.get("contexto", "")
+                ubicacion = configuracion.get("ubicacion", args.ubicacion)
+                if (not isinstance(palabras, list) or not palabras
+                        or len(palabras) > 5
+                        or not all(isinstance(p, str) and p.strip() for p in palabras)
+                        or not isinstance(contexto, str) or not isinstance(ubicacion, str)):
+                    parser.error("BUSQUEDA_JSON requiere palabras_clave (1 a 5 términos) y texto válido en contexto/ubicacion.")
+                total = 0
+                for termino in palabras:
+                    total += buscar_y_evaluar(
+                        raiz, termino.strip(), ubicacion, args.limite, args.simular,
+                        perfil, contexto,
+                    )
+                print(f"Avisos {'detectados' if args.simular else 'cargados para revisión'}: {total}")
+            else:
+                contexto = args.contexto_archivo.read_text(encoding="utf-8") if args.contexto_archivo else ""
+                cantidad = buscar_y_evaluar(
+                    raiz, args.buscar_linkedin, args.ubicacion, args.limite,
+                    args.simular, perfil, contexto,
+                )
+                print(f"Avisos {'detectados' if args.simular else 'cargados para revisión'}: {cantidad}")
         except KeyringError:
             parser.exit(1, "No se pudo acceder al Llavero de macOS. Revisá su autorización.\n")
-        except (BrowserError, ValueError, OSError, EOFError, KeyError,
+        except (BrowserError, ValueError, OSError, EOFError, KeyError, TypeError,
                 RequestException, GSpreadException, GoogleAuthError) as error:
             parser.exit(1, f"No se pudo completar la búsqueda: {error}\n")
         return
@@ -72,6 +134,23 @@ def main():
         except (ValueError, RequestException) as error:
             parser.exit(1, f"No se pudo leer el aviso: {error}\n")
         print(aviso.empresa, aviso.puesto, aviso.descripcion, sep="\n\n")
+        return
+    if args.evaluar_aviso:
+        from agente.ia_claude import ErrorEvaluacion, evaluar_aviso
+
+        try:
+            contexto = args.contexto_archivo.read_text(encoding="utf-8") if args.contexto_archivo else ""
+            resultado = evaluar_aviso(
+                args.perfil or raiz / "datos/cv_maestro.yaml",
+                Path(args.evaluar_aviso),
+                contexto,
+                fecha_publicacion=args.publicado_en,
+            )
+        except (ErrorEvaluacion, OSError) as error:
+            parser.exit(1, f"No se pudo evaluar el aviso: {error}\n")
+        import json
+
+        print(json.dumps(resultado, ensure_ascii=False, indent=2))
         return
     if args.autorizar_gmail or args.importar_alertas is not None:
         from google.auth.exceptions import GoogleAuthError

@@ -31,7 +31,8 @@ def resumir(descripcion, antecedente=""):
 def guardar_descripcion(identificador, aviso):
     carpeta = Path(__file__).resolve().parent.parent / "datos" / "avisos"
     carpeta.mkdir(parents=True, exist_ok=True)
-    datos = dict(empresa=aviso.empresa, puesto=aviso.puesto, descripcion=aviso.descripcion)
+    datos = dict(empresa=aviso.empresa, puesto=aviso.puesto, descripcion=aviso.descripcion,
+                 fecha_publicacion=getattr(aviso, "fecha_publicacion", ""))
     (carpeta / f"{identificador}.json").write_text(
         json.dumps(datos, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

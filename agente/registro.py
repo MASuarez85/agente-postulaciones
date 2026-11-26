@@ -68,8 +68,10 @@ def registrar(aviso, preparar=None):
     return estado, nota
 
 
-def importar_alertas(enlaces, lector=None):
+def importar_alertas(enlaces, lector=None, evaluar=False, perfil=None, contexto="", origen="Alerta Gmail"):
     """Agrega avisos nuevos a la cola de revisión y omite IDs conocidos."""
+    if evaluar and not perfil:
+        raise ValueError("Se requiere un perfil profesional para evaluar avisos.")
     planilla = abrir_registro()
     hoja, filas = leer_registro(planilla)
     config = dict(planilla.worksheet("Config").get_all_values()[1:])
@@ -79,6 +81,11 @@ def importar_alertas(enlaces, lector=None):
         tuple(config[f"historico_{campo}"] for campo in ("empresa", "puesto", "enlace")),
     )
     conocidos = historico.ids | {fila[0] for fila in filas if fila}
+    incompletos = {
+        fila[0]: numero
+        for numero, fila in enumerate(filas, start=2)
+        if len(fila) >= 5 and fila[0] and fila[4] and (not fila[2] or not fila[3])
+    }
     fecha = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).date().isoformat()
     from agente.avisos import leer_aviso
     from agente.historico import Postulacion
@@ -86,33 +93,95 @@ def importar_alertas(enlaces, lector=None):
 
     lector = lector or leer_aviso
     nuevas = []
+    actualizaciones = []
     repetidos = 0
     previos = 0
     invalidos = 0
+    fuera_ventana = 0
+    evaluacion_pendiente = 0
+    lectura_pendiente = 0
+    recuperados = 0
     for url, asunto in enlaces.items():
         identificador = id_aviso(url)
         if not identificador:
             invalidos += 1
             continue
-        if identificador in conocidos:
+        fila_existente = incompletos.get(identificador)
+        if identificador in conocidos and fila_existente is None:
             repetidos += 1
             continue
         conocidos.add(identificador)
         datos = dict(id_aviso=identificador, fecha_detectado=fecha, link_aviso=url,
-                     estado="revisar", notas=f"Alerta Gmail: {asunto}. Verificá empresa, puesto, historial y elegibilidad en el aviso.")
+                     estado="revisar", notas=f"{origen}: {asunto}. Verificá empresa, puesto, historial y elegibilidad en el aviso.")
         try:
             aviso = lector(url)
-            guardar_descripcion(identificador, aviso)
             coincidencia = historico.coincidencia(Postulacion(aviso.empresa, aviso.puesto, url))
-            if coincidencia == "ya postulado":
+            if coincidencia == "ya postulado" and fila_existente is None:
                 previos += 1
                 continue
             datos.update(empresa=aviso.empresa, rol=aviso.puesto)
-            datos["notas"] = resumir(aviso.descripcion, coincidencia)
         except (ValueError, RequestException) as error:
-            datos["notas"] = f"Alerta Gmail: {asunto}. Lectura pendiente: {error}"
-        nuevas.append([datos.get(columna, "") for columna in COLUMNAS])
+            lectura_pendiente += 1
+            if fila_existente is not None:
+                actualizaciones.append({"range": f"N{fila_existente}", "values": [[f"Lectura pendiente: {error}"]]})
+            continue
+
+        guardar_descripcion(identificador, aviso)
+        datos["notas"] = resumir(aviso.descripcion, coincidencia)
+        if evaluar:
+            try:
+                from agente.ia_claude import evaluar_descripcion
+
+                resultado = evaluar_descripcion(
+                    perfil,
+                    aviso.descripcion,
+                    contexto,
+                    fecha_publicacion=getattr(aviso, "fecha_publicacion", "") or None,
+                )
+                if resultado["estado"] == "no_elegible_por_antiguedad":
+                    fuera_ventana += 1
+                    if fila_existente is not None:
+                        actualizaciones.extend([
+                            {"range": f"C{fila_existente}:D{fila_existente}", "values": [[datos["empresa"], datos["rol"]]]},
+                            {"range": f"N{fila_existente}", "values": [[resultado["motivo"]]]},
+                        ])
+                        recuperados += 1
+                    continue
+                datos["puntaje"] = resultado["puntaje"]
+                notas = [f"{origen}: {asunto}.", f"IA {resultado['compatibilidad']} ({resultado['puntaje']}/100): {resultado['resumen']}"]
+                if resultado["brechas"]:
+                    notas.append("Brechas: " + "; ".join(resultado["brechas"][:2]))
+                if resultado["requiere_revision"]:
+                    notas.append("Requiere revisión.")
+                if not resultado["fecha_verificada"]:
+                    notas.append("Fecha de publicación no verificada.")
+                datos["notas"] = " ".join(notas)[:1000]
+            except (ValueError, OSError) as error:
+                evaluacion_pendiente += 1
+                datos["notas"] = f"Evaluación IA pendiente: {error}. Aviso conservado para revisión."
+        if fila_existente is not None:
+            actualizaciones.extend([
+                {"range": f"C{fila_existente}:D{fila_existente}", "values": [[datos["empresa"], datos["rol"]]]},
+                {"range": f"N{fila_existente}", "values": [[datos["notas"]]]},
+            ])
+            if datos.get("puntaje"):
+                actualizaciones.append({"range": f"H{fila_existente}", "values": [[datos["puntaje"]]]})
+            recuperados += 1
+        else:
+            nuevas.append([datos.get(columna, "") for columna in COLUMNAS])
+    if actualizaciones:
+        hoja.batch_update(actualizaciones, value_input_option="RAW")
     if nuevas:
         hoja.append_rows(nuevas, value_input_option="RAW")
-    print(f"Resumen de importación. Repetidos por ID: {repetidos}. Postulaciones previas: {previos}. Enlaces inválidos: {invalidos}. Nuevos: {len(nuevas)}.")
+    print(f"Resumen de importación. Repetidos por ID: {repetidos}. Postulaciones previas: {previos}. Fuera de 7 días: {fuera_ventana}. Recuperados: {recuperados}. Lectura pendiente: {lectura_pendiente}. IA pendiente: {evaluacion_pendiente}. Enlaces inválidos: {invalidos}. Nuevos: {len(nuevas)}.")
     return len(nuevas)
+
+
+def enlaces_incompletos():
+    """Devuelve links registrados que todavía no tienen empresa o puesto."""
+    hoja, filas = leer_registro(abrir_registro())
+    return {
+        fila[4]: "reintento de lectura"
+        for fila in filas
+        if len(fila) >= 5 and fila[4] and (not fila[2] or not fila[3])
+    }

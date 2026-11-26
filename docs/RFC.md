@@ -10,7 +10,7 @@ Evolucionar la aplicación local actual hacia un agente configurable por usuario
 
 ## 2. Estado actual
 
-El proyecto contiene interfaz local, flujos para buscar en LinkedIn e importar alertas de Gmail, conexión de lectura/escritura con Google Sheets, deduplicación y generación de PDFs por coincidencia de palabras clave. Antes de incorporar este RFC, el README mencionaba una versión v1.1. La búsqueda diaria en varios portales, la evaluación integral de elegibilidad y compatibilidad y el envío automático siguen pendientes. La generación actual no usa un modelo de IA.
+El proyecto contiene interfaz local, búsqueda configurada en LinkedIn, importación de alertas de Gmail, conexión de lectura/escritura con Google Sheets, deduplicación y generación de PDFs por coincidencia de palabras clave. El flujo de búsqueda en LinkedIn puede evaluar compatibilidad con Claude y cargar resultados para revisión. La búsqueda diaria programada, la cobertura de otros portales, la elegibilidad integral y el envío automático siguen pendientes. La generación de documentos sigue basada en plantillas.
 
 ## 3. Arquitectura propuesta
 

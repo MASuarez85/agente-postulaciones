@@ -109,6 +109,77 @@ def leer_tarjetas(pagina, limite):
     return urls[:limite]
 
 
+def _texto_visible(pagina, selectores):
+    for selector in selectores:
+        try:
+            elemento = pagina.locator(selector).filter(visible=True).first
+            texto = elemento.inner_text(timeout=1200).strip()
+            if texto:
+                return texto
+        except BrowserError:
+            continue
+    return ""
+
+
+def _atributo(pagina, selector, nombre):
+    try:
+        elementos = pagina.locator(selector)
+        return elementos.first.get_attribute(nombre, timeout=1200) if elementos.count() else ""
+    except BrowserError:
+        return ""
+
+
+def leer_detalle(pagina):
+    """Lee los metadatos públicos y el contenido visible de un aviso."""
+    try:
+        estructurado = extraer(pagina.content())
+        if estructurado.empresa and estructurado.puesto and estructurado.descripcion:
+            if not estructurado.fecha_publicacion:
+                tiempo = _atributo(pagina, "time[datetime]", "datetime") or ""
+                fecha = tiempo[:10] if re.match(r"^\d{4}-\d{2}-\d{2}", tiempo) else ""
+                estructurado = Aviso(estructurado.empresa, estructurado.puesto, estructurado.descripcion, fecha)
+            return estructurado
+    except ValueError:
+        pass
+
+    titulo = _texto_visible(pagina, ["h1", ".job-details-jobs-unified-top-card__job-title"])
+    empresa = _texto_visible(pagina, [
+        ".job-details-jobs-unified-top-card__company-name",
+        ".jobs-unified-top-card__company-name",
+        ".topcard__org-name-link",
+        '[data-test-id="job-details-company-name"]',
+        'a[href*="/company/"]',
+    ])
+    descripcion = _texto_visible(pagina, [
+        "#job-details",
+        ".jobs-description__content",
+        ".show-more-less-html__markup",
+        ".jobs-box__html-content",
+    ])
+
+    titulo_meta = ""
+    titulo_meta = _atributo(pagina, 'meta[property="og:title"]', "content")
+    titulo_pagina = pagina.title().strip()
+    candidatos = [titulo_meta, titulo_pagina]
+    for candidato in candidatos:
+        partes = [parte.strip() for parte in candidato.split("|") if parte.strip()]
+        partes = [parte for parte in partes if parte.casefold() not in {"linkedin", "jobs", "empleos"}]
+        if not titulo and partes:
+            titulo = partes[0]
+        if not empresa and len(partes) > 1:
+            empresa = partes[1]
+        if titulo and empresa:
+            break
+    if not descripcion:
+        descripcion = _atributo(pagina, 'meta[name="description"]', "content") or ""
+
+    tiempo = _atributo(pagina, "time[datetime]", "datetime") or ""
+    fecha = tiempo[:10] if re.match(r"^\d{4}-\d{2}-\d{2}", tiempo) else ""
+    if not all((titulo, empresa, descripcion)):
+        raise ValueError("LinkedIn no expuso empresa, puesto y descripción completos.")
+    return Aviso(empresa, titulo, descripcion, fecha)
+
+
 def buscar(perfil, palabras, ubicacion, limite, simular, importar):
     perfil.mkdir(parents=True, exist_ok=True)
     os.chmod(perfil, 0o700)
@@ -166,37 +237,27 @@ def buscar(perfil, palabras, ubicacion, limite, simular, importar):
 
             def leer(url):
                 pagina.goto(url, wait_until="domcontentloaded")
-                try:
-                    try:
-                        return extraer(pagina.content())
-                    except ValueError:
-                        pass
-                    titulo = pagina.locator('h1, a[href*="/jobs/view/"]').filter(
-                        visible=True
-                    ).first
-                    titulo.wait_for(state="visible", timeout=15000)
-                    empresa = pagina.locator(
-                        '.job-details-jobs-unified-top-card__company-name, .topcard__org-name-link, a[href*="/company/"][href*="/life"]'
-                    ).filter(visible=True).first
-                    empresa.wait_for(state="visible", timeout=15000)
-                    descripcion = pagina.locator(
-                        '#job-details, .show-more-less-html__markup'
-                    ).filter(visible=True).first
-                    if not descripcion.count():
-                        descripcion = pagina.get_by_role("heading", name="About the job", exact=True).locator("..")
-                        descripcion = descripcion.locator("..")
-                    descripcion.wait_for(state="visible", timeout=15000)
-                    nombre = empresa.inner_text().strip()
-                    texto = descripcion.inner_text().strip()
-                    puesto = pagina.title().split(" | ")[0].strip()
-                    if puesto in {"LinkedIn", "Jobs", "Empleos", ""}:
-                        raise ValueError("El título del aviso todavía no está disponible.")
-                    if not all((puesto, nombre, texto)):
-                        raise ValueError("LinkedIn no mostró todos los datos del aviso.")
-                    return Aviso(nombre, puesto, texto)
-                except BrowserError:
-                    raise ValueError("No se pudieron leer los detalles de este aviso en LinkedIn.") from None
+                return leer_detalle(pagina)
 
             return importar(dict.fromkeys(urls, palabras), lector=leer)
+        finally:
+            contexto.close()
+
+
+def reintentar_lecturas(perfil, urls, importar):
+    """Vuelve a leer detalles de links incompletos usando la sesión local."""
+    perfil.mkdir(parents=True, exist_ok=True)
+    os.chmod(perfil, 0o700)
+    with sync_playwright() as playwright:
+        contexto = playwright.chromium.launch_persistent_context(str(perfil), headless=False)
+        try:
+            pagina = contexto.new_page()
+            iniciar_sesion(pagina)
+
+            def leer(url):
+                pagina.goto(url, wait_until="domcontentloaded")
+                return leer_detalle(pagina)
+
+            return importar(dict.fromkeys(urls, "reintento de lectura"), lector=leer)
         finally:
             contexto.close()

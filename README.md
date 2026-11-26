@@ -6,7 +6,7 @@
 - [RFC](docs/RFC.md): arquitectura propuesta y reglas de operación.
 - [Changelog](docs/CHANGELOG.md): cambios relevantes del producto y su diseño.
 
-El PRD y el RFC describen el producto objetivo y su arquitectura; no implican que esas capacidades ya estén implementadas. El prototipo actual ofrece flujos locales para consultar y registrar avisos, importar alertas de Gmail, buscar en LinkedIn y generar borradores de documentos. La búsqueda diaria en varios portales, la evaluación integral por usuario y el envío automático siguen siendo parte del diseño objetivo. La demo usa datos ficticios y no necesita credenciales ni paquetes externos.
+El PRD y el RFC describen el producto objetivo y su arquitectura; no implican que todas esas capacidades ya estén implementadas. El prototipo actual permite buscar en LinkedIn con una configuración de palabras clave por usuario, evaluar los avisos encontrados con Claude y registrarlos para revisión. La programación diaria, otros portales, la preparación con IA y el envío automático siguen pendientes. La demo usa datos ficticios y no necesita credenciales ni paquetes externos.
 
 ```sh
 python3 main.py --demo
@@ -73,13 +73,84 @@ Guardá el texto del aviso en un archivo UTF-8. Instalá las dependencias actual
 Los dos PDFs se crean juntos en `salida/`, en una carpeta por empresa, puesto y fecha.
 Podés usar `--salida` para elegir otro directorio. El generador produce borradores en
 español. Prioriza habilidades y logros mediante coincidencias de texto y toma las
-afirmaciones sobre tu experiencia directamente del CV maestro. No requiere una API de
-IA. La integración con Claude, Drive y el flujo de aprobación sigue pendiente.
+afirmaciones sobre tu experiencia directamente del CV maestro. La generación de PDFs
+sigue basada en plantillas; Claude se usa en el análisis de compatibilidad descrito más
+abajo. Drive y el flujo de aprobación siguen pendientes.
 
 El CV usa el encabezado de contacto, perfil profesional, experiencia principal,
 experiencia técnica anterior y habilidades y formación de los ejemplos de Tether.
 La carta usa el mismo encabezado y adapta el asunto, el saludo y los ejemplos
 de experiencia a cada aviso. Los datos profesionales se toman del CV maestro.
+
+## Buscar avisos y evaluar con Claude
+
+El agente puede buscar avisos en LinkedIn usando palabras clave configuradas por persona,
+leerlos, consultar el historial, evaluar compatibilidad con Claude y cargar los nuevos en
+la planilla como pendientes de revisión. Todavía no envía postulaciones. Por ahora
+LinkedIn es el único portal conectado. Copiá `.env.example` a `.env`, configurá
+`ANTHROPIC_API_KEY` y cargá las variables antes de ejecutar. El modelo se puede cambiar
+con `ANTHROPIC_MODEL`.
+
+```sh
+.venv/bin/python -m pip install -r requirements.txt
+set -a
+source ./.env
+set +a
+```
+
+Copiá la plantilla de búsqueda y completá tus términos, ubicación y contexto:
+
+```sh
+if [ ! -f datos/busqueda.json ]; then cp configuracion/busqueda.example.json datos/busqueda.json; fi
+```
+
+Luego ejecutá la búsqueda. Cada palabra clave realiza una consulta independiente; `--limite`
+controla la cantidad máxima de avisos por consulta.
+
+```sh
+.venv/bin/python main.py --buscar-config datos/busqueda.json --limite 5
+```
+
+Para previsualizar los enlaces sin registrar ni evaluar avisos, agregá `--simular`.
+También podés hacer una búsqueda puntual pasando términos por CLI con `--buscar-linkedin`.
+
+```sh
+.venv/bin/python main.py --buscar-linkedin "Engineering Manager" \\
+  --contexto-archivo datos/contexto_busqueda.txt --limite 10
+```
+
+Para volver a leer filas anteriores que hayan quedado sin empresa o puesto, ejecutá:
+
+```sh
+.venv/bin/python main.py --reintentar-incompletos
+```
+
+La fecha se lee del aviso cuando LinkedIn la expone. Los anuncios de más de siete días
+se descartan; si no hay fecha verificable, el agente registra la evaluación como revisión
+pendiente y no permite postular automáticamente.
+
+La solicitud envía a Anthropic el contexto, la descripción del aviso y solo los datos
+profesionales del CV; excluye datos de contacto y exige citas literales para la evidencia.
+El programa verifica esas citas en local y marca la evaluación para revisión si alguna
+no se encuentra. Si falta la fecha, el resultado también queda en revisión.
+
+Para evaluar manualmente un archivo de aviso, sin búsqueda, usá:
+
+```sh
+set -a
+source ./.env
+set +a
+.venv/bin/python main.py --evaluar-aviso "$HOME/Downloads/aviso.txt" \\
+  --contexto-archivo datos/contexto_busqueda.txt
+```
+
+El contexto de búsqueda es un archivo de texto opcional. La solicitud envía a Anthropic
+el contexto, la descripción del aviso y solo los datos profesionales del CV; excluye
+datos de contacto y exige citas literales para la evidencia. El programa verifica esas
+citas en local y marca la evaluación para revisión si alguna no se encuentra. Pasá
+`--publicado-en` únicamente con la fecha verificada en la fuente; fechas fuera de la
+ventana de siete días se bloquean sin llamar al modelo. Sin una fecha verificada, el
+resultado queda en revisión. Esta primera etapa no habilita el envío automático.
 
 ## Primera versión asistida
 

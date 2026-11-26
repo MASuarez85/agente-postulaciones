@@ -37,6 +37,7 @@ class Aviso:
     empresa: str
     puesto: str
     descripcion: str
+    fecha_publicacion: str = ""
 
 
 def extraer(html):
@@ -64,7 +65,8 @@ def extraer(html):
         empresa = organizacion.get("name", "").strip()
         puesto = dato.get("title", "").strip()
         if empresa and puesto and texto:
-            return Aviso(empresa, puesto, texto)
+            fecha = dato.get("datePosted") or ""
+            return Aviso(empresa, puesto, texto, str(fecha)[:10])
     raise ValueError("El aviso no expone datos completos. Puede requerir sesión o estar cerrado.")
 
 
